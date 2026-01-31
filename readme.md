@@ -56,3 +56,16 @@ run this commands
 You can run all files with input/filename*.txt, you can use anywhere from 1-10 threads.
 example run with 5 resolver & 5 requester threads(Can copy/paste if desired):
  ./multi-lookup 5 10 serviced.txt results.txt input/*.txt
+
+
+ ## Performance
+
+Measured using 30 input files containing 618 hostnames.
+
+| Configuration | Total Time |
+|---------------|------------|
+| 1 requester / 1 resolver | ~198 seconds |
+| 10 requesters / 10 resolvers | ~31 seconds |
+
+Parallel execution achieved approximately a **6.5× reduction in total runtime**.
+Resolver threads complete in waves due to blocking DNS resolution calls; the remaining execution time is dominated by external DNS resolver latency rather than synchronization or contention within the program.
