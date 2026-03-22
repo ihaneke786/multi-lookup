@@ -136,6 +136,7 @@ int main(int argc, char * argv[]){
 
     // for multi-lookup
     char* program_name = argv[0];
+    
     // get the requester threads from command line
     lookup_data.num_requesterThreads = atoi(argv[1]);
     if(lookup_data.num_requesterThreads > 10 || lookup_data.num_requesterThreads < 1){

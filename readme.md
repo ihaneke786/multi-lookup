@@ -1,71 +1,98 @@
-# Multi-Lookup: Multithreaded Producer–Consumer DNS Resolver
+# multi-lookup
 
-A C program implementing the producer/consumer pattern using POSIX threads to resolve hostnames concurrently. The project focuses on safe multithreaded programming, synchronization, and performance tradeoffs.
+Multithreaded **producer–consumer** DNS resolver in C using **POSIX threads**, a thread-safe bounded buffer, and mutex-protected I/O. Requester threads read hostnames from files; resolver threads dequeue them and resolve via `getaddrinfo` (IPv4 then IPv6).
 
----
-
-## Overview
-
-This project implements a bounded-buffer producer/consumer system where multiple requester threads read hostnames from input files and multiple resolver threads perform DNS lookups concurrently.
-
-The primary goal of this project was to gain hands-on experience with multithreading in C, including mutexes, condition variables, and avoiding common concurrency issues such as race conditions and deadlocks.
+**Good for:** systems programming, concurrency, and performance discussions on a résumé or GitHub.
 
 ---
 
-## Design
+## Build
 
-### Thread Roles
-
-- **Requester threads (producers)**  
-  Read hostnames from one or more input files and place them into a shared bounded buffer.
-
-- **Resolver threads (consumers)**  
-  Remove hostnames from the buffer and perform DNS lookups, writing results to an output file.
-
----
-
-### Shared Data Structures
-
-- A bounded, thread-safe array used as the producer/consumer buffer
-- Shared output files protected by mutexes to prevent concurrent write corruption
-
----
-
-### Concurrency & Synchronization
-
-- Implemented using **POSIX threads (pthreads)**
-- **Mutexes** protect critical sections involving shared data
-- **Condition variables** block producer threads when the buffer is full and consumer threads when the buffer is empty
-- Threads exit cleanly once all input files have been processed and the buffer is drained
-- Avoids busy waiting and minimizes contention between threads
-
----
-
-## Build & Run
-
-### Build
-run these commands
+```bash
+make              # default: debug symbols, warnings
+make release      # optimized (-O2); use before serious timing
 make clean
-make 
+```
 
-### Run
-run this commands
-./multi-lookup <# requester thread> <# resolver threads> <serviced.txt> <results.txt> <input/filename(s)>
+Requires **GCC** (or compatible) and **pthreads**. Tested on macOS and Linux.
 
+---
 
-You can run all files with input/filename*.txt, you can use anywhere from 1-10 threads.
-example run with 5 resolver & 5 requester threads(Can copy/paste if desired):
- ./multi-lookup 5 10 serviced.txt results.txt input/*.txt
+## How to run
 
+**Syntax:**
 
- ## Performance
+```text
+./multi-lookup <requester_threads> <resolver_threads> <serviced_log> <results_csv> <input_files...>
+```
 
-Measured using 30 input files containing 618 hostnames.
+- **Requester threads** (producers): 1–10  
+- **Resolver threads** (consumers): 1–10  
+- **serviced_log**: hostnames read from inputs (order reflects scheduling)  
+- **results_csv**: `hostname, ip` or `hostname, NOT_RESOLVED`  
 
-| Configuration | Total Time |
-|---------------|------------|
-| 1 requester / 1 resolver | ~198 seconds |
-| 10 requesters / 10 resolvers | ~31 seconds |
+**Examples:**
 
-Parallel execution achieved approximately a **6.5× reduction in total runtime**.
-Resolver threads complete in waves due to blocking DNS resolution calls; the remaining execution time is dominated by external DNS resolver latency rather than synchronization or contention within the program.
+```bash
+# Small run (few files)
+./multi-lookup 2 2 serviced.txt results.txt input/names1.txt input/names2.txt
+
+# All bundled inputs (~618 hostnames across 30 files)
+./multi-lookup 5 5 serviced.txt results.txt input/*.txt
+
+# Makefile shortcuts (need network — live DNS)
+make run          # 2×2 threads, three small input files
+make run-full     # 10×10 threads, all input/*.txt
+```
+
+DNS queries need **network access**. If everything shows `NOT_RESOLVED`, check connectivity and resolver settings.
+
+---
+
+## Performance: 1×1 vs 10×10 threads
+
+Workload is **DNS-bound**: wall-clock time is dominated by `getaddrinfo` latency, not CPU. More resolver threads let many lookups overlap, so total runtime usually drops sharply until you hit diminishing returns (network, OS, and remote DNS limits).
+
+### Quick comparison (same machine, same inputs)
+
+Use the repo’s **three smallest files** (~63 hostnames total) so you can reproduce numbers in about a minute:
+
+```bash
+make bench-quick
+```
+
+Example output shape (your numbers will vary by machine and network):
+
+| Configuration | Program-reported total time (illustrative) |
+|---------------|---------------------------------------------|
+| 1 requester / 1 resolver | ~4 s |
+| 10 requesters / 10 resolvers | ~0.08 s |
+
+That’s a large speedup on this **small** run because ten resolvers finish the backlog of lookups almost in parallel; the single-threaded case serializes DNS.
+
+### Full bundled dataset (618 hostnames, 30 files)
+
+```bash
+make bench          # several minutes for the 1×1 case
+# or, manually:
+./multi-lookup 1 1 serviced.txt results_1.txt input/*.txt
+./multi-lookup 10 10 serviced.txt results_10.txt input/*.txt
+```
+
+On typical class/lab hardware, **10×10** versus **1×1** is often on the order of **~5–7× faster end-to-end** for this full set, because most of the work is overlapping DNS waits rather than contending on your mutexes.
+
+**Tip:** Run `make release` first if you want timings closer to what you’d quote in an interview (debug `-g` builds are slightly slower).
+
+---
+
+## Project layout
+
+| File | Role |
+|------|------|
+| `multi-lookup.c` | Main, producer/consumer threads, CLI |
+| `array.c` / `array.h` | Bounded buffer + sync |
+| `newDNSlookup.c` | `dnslookup()` via `getaddrinfo` (IPv4, then IPv6) |
+| `util.h` | `dnslookup` declaration, return codes |
+| `input/*.txt` | Sample hostnames |
+
+---

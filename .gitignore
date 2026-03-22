@@ -1,2 +1,8 @@
 *.o
 multi-lookup
+
+# Local run / benchmark outputs
+serviced.txt
+results.txt
+serviced_bench*.txt
+results_bench*.txt

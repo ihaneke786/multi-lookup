@@ -1,37 +1,47 @@
-# Makefile v1 for CSCI3753-F23 PA6
+# multi-lookup — multithreaded producer/consumer DNS resolver
 
-# Add any additional source files you'd like to submit by appending
-# .c filenames to the MSRCS line and .h filenames to the MHDRS line
-MSRCS = multi-lookup.c array.c
-MHDRS = multi-lookup.h array.h
+PROJECT := multi-lookup
+CC ?= gcc
+CFLAGS ?= -Wall -Wextra -Wpedantic -g -std=gnu99 -pthread
+SRCS := multi-lookup.c array.c DNSlookup.c
+HDRS := multi-lookup.h array.h util.h
+OBJS := $(SRCS:.c=.o)
+INPUT := input/names1.txt input/names2.txt input/names3.txt
 
-# Do not modify anything after this line
-CC = gcc
-CFLAGS = -Wextra -Wall -g -std=gnu99
-INCLUDES = 
-LFLAGS = 
-LIBS = -lpthread
+.PHONY: all release clean distclean help run run-full bench bench-quick
 
-MAIN = multi-lookup
+all: $(PROJECT)
 
-SRCS = $(MSRCS) util.c
-HDRS = $(MHDRS) util.h
-
-OBJS = $(SRCS:.c=.o) 
-
-$(MAIN): $(OBJS)
-	$(CC) $(CFLAGS) $(INCLUDES) -o $(MAIN) $(OBJS) $(LFLAGS) $(LIBS)
+$(PROJECT): $(OBJS)
+	$(CC) -o $@ $^ -lpthread
 
 %.o: %.c $(HDRS)
-	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
-.PHONY: clean
-clean: 
-	$(RM) *.o *~ $(MAIN)
+release: clean
+	$(MAKE) all CFLAGS='-O2 -DNDEBUG -Wall -Wextra -std=gnu99 -pthread'
 
-SUBMITFILES = $(MSRCS) $(MHDRS) Makefile README
-submit: 
-	@read -r -p "Enter your identikey username: " username; \
-	echo; echo Bundling the following files for submission; \
-	tar --transform "s|^|PA6-$$username/|" -cvf PA6-$$username.txt $(SUBMITFILES); \
-	echo; echo Please upload the file PA6-$$username.txt to Canvas to complete your submission; echo
+clean:
+	$(RM) $(OBJS) $(PROJECT)
+
+distclean: clean
+	$(RM) -f serviced*.txt results*.txt
+
+help:
+	@echo "all (default), release, clean, distclean"
+	@echo "run, run-full, bench-quick, bench"
+	@echo "./$(PROJECT) <requesters> <resolvers> <serviced> <results> <inputs...>"
+
+run: $(PROJECT)
+	./$(PROJECT) 2 2 serviced.txt results.txt $(INPUT)
+
+run-full: $(PROJECT)
+	./$(PROJECT) 10 10 serviced.txt results.txt input/*.txt
+
+bench-quick: $(PROJECT)
+	@echo "1×1:"; ./$(PROJECT) 1 1 /tmp/s1.txt /tmp/r1.txt $(INPUT) 2>&1 | grep 'total time'
+	@echo "10×10:"; ./$(PROJECT) 10 10 /tmp/s2.txt /tmp/r2.txt $(INPUT) 2>&1 | grep 'total time'
+
+bench: $(PROJECT)
+	@echo "1×1:"; ./$(PROJECT) 1 1 /tmp/s1.txt /tmp/r1.txt input/*.txt 2>&1 | grep 'total time'
+	@echo "10×10:"; ./$(PROJECT) 10 10 /tmp/s2.txt /tmp/r2.txt input/*.txt 2>&1 | grep 'total time'
